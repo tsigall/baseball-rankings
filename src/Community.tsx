@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TEAMS_BY_ID } from './teams.ts'
+import { getSport, type SportId } from './teams.ts'
 import { fetchRankings } from './community.ts'
 import { aggregate, type CommunityRow } from './aggregate.ts'
 
@@ -8,15 +8,16 @@ type Load =
   | { status: 'ready'; rows: CommunityRow[]; submissions: number }
   | { status: 'error'; message: string }
 
-export default function Community() {
+export default function Community({ sport }: { sport: SportId }) {
   const [load, setLoad] = useState<Load>({ status: 'loading' })
 
   useEffect(() => {
     let cancelled = false
-    fetchRankings()
+    setLoad({ status: 'loading' })
+    fetchRankings(sport)
       .then((rankings) => {
         if (cancelled) return
-        setLoad({ status: 'ready', rows: aggregate(rankings), submissions: rankings.length })
+        setLoad({ status: 'ready', rows: aggregate(sport, rankings), submissions: rankings.length })
       })
       .catch((err) => {
         if (!cancelled) setLoad({ status: 'error', message: String(err.message ?? err) })
@@ -24,7 +25,9 @@ export default function Community() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [sport])
+
+  const teams = getSport(sport).byId
 
   if (load.status === 'loading') {
     return <p className="text-neutral-400 text-sm">Loading community rankings…</p>
@@ -37,7 +40,7 @@ export default function Community() {
   if (load.submissions === 0) {
     return (
       <p className="text-neutral-400 text-sm">
-        No rankings submitted yet. Finish one and it'll show up here.
+        No {getSport(sport).label} rankings submitted yet. Finish one and it'll show up here.
       </p>
     )
   }
@@ -53,7 +56,7 @@ export default function Community() {
 
       <ol className="space-y-1">
         {load.rows.map((row, i) => {
-          const team = TEAMS_BY_ID.get(row.id)!
+          const team = teams.get(row.id)!
           return (
             <li
               key={row.id}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { TEAMS, TEAMS_BY_ID } from './teams.ts'
+import { SPORTS, getSport, type Sport, type SportId } from './teams.ts'
 import {
   createSortState,
   choose,
@@ -10,13 +10,11 @@ import {
   type Choice,
   type SortState,
 } from './sort.ts'
-import { rankingFromUrl, shareUrl } from './share.ts'
+import { rankingFromUrl, shareUrl, type SharedRanking } from './share.ts'
 import { copyRankingImage } from './image.ts'
 import { communityEnabled } from './config.ts'
 import { submitRanking } from './community.ts'
 import Community from './Community.tsx'
-
-const TOTAL = estimateTotal(TEAMS.length)
 
 /** Fisher-Yates, on a copy. */
 function shuffled<T>(arr: T[]): T[] {
@@ -31,71 +29,54 @@ function shuffled<T>(arr: T[]): T[] {
 // Merge sort compares teams based on where they sit in the starting list, so
 // shuffling first makes every matchup different from run to run. The final
 // ranking is unaffected — only the order the questions arrive in changes.
-function newRun(): SortState {
-  return createSortState(shuffled(TEAMS.map((t) => t.id)))
+function newRun(sport: Sport): SortState {
+  return createSortState(shuffled(sport.teams.map((t) => t.id)))
 }
 
 export default function App() {
-  const [state, setState] = useState<SortState>(newRun)
-  // Previous states, newest last. Undo pops one off.
-  const [history, setHistory] = useState<SortState[]>([])
-  // Someone else's ranking, if they arrived via a shared link.
-  const [shared, setShared] = useState<string[] | null>(rankingFromUrl)
+  // Someone else's ranking, if they arrived via a shared link. The link says
+  // which sport it is, so that's also where the app starts.
+  const [shared, setShared] = useState<SharedRanking | null>(rankingFromUrl)
+  const [sportId, setSportId] = useState<SportId>(shared?.sport ?? SPORTS[0].id)
   const [tab, setTab] = useState<'rank' | 'community'>('rank')
 
-  function pick(choice: Choice) {
-    setHistory((h) => [...h, state])
-    setState(choose(state, choice))
-  }
+  const sport = getSport(sportId)
 
-  function undo() {
-    const prev = history[history.length - 1]
-    if (!prev) return
-    setHistory((h) => h.slice(0, -1))
-    setState(prev)
-  }
-
-  function restart() {
-    setHistory([])
-    setState(newRun())
-    // Drop the ?r= code so a reload doesn't drag the shared ranking back.
+  /** Drop the ?r= code so a reload doesn't drag the shared ranking back. */
+  function clearShared() {
     setShared(null)
     window.history.replaceState(null, '', window.location.pathname)
-    submitted.current = null
-    setSubmitState('idle')
   }
-
-  const pair = currentPair(state)
-  const done = isDone(state)
-  const pct = done ? 100 : Math.min(99, Math.round((state.comparisons / TOTAL) * 100))
-
-  // Send each finished ranking to the community page exactly once. The ref
-  // holds what was already sent, which also makes this safe against React
-  // running the effect twice in development.
-  const submitted = useRef<string | null>(null)
-  const [submitState, setSubmitState] = useState<'idle' | 'sending' | 'saved' | 'failed'>('idle')
-
-  useEffect(() => {
-    if (!communityEnabled || shared || !done) return
-    const order = result(state)
-    const key = order.join(',')
-    if (submitted.current === key) return
-    submitted.current = key
-    setSubmitState('sending')
-    submitRanking(order).then((ok) => setSubmitState(ok ? 'saved' : 'failed'))
-  }, [done, shared, state])
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col items-center px-4 py-8">
       <header className="w-full max-w-2xl mb-8">
-        <h1 className="text-2xl font-bold">Rank all 30 MLB teams</h1>
+        <h1 className="text-2xl font-bold">
+          Rank all {sport.teams.length} {sport.label} teams
+        </h1>
         <p className="text-neutral-400 text-sm mt-1">
           {tab === 'community'
-            ? 'How everyone who has finished the quiz ranks the teams.'
-            : shared
+            ? `How everyone who has finished the ${sport.label} quiz ranks the teams.`
+            : shared?.sport === sportId
               ? "You're looking at someone else's ranking."
               : 'Pick your favorite of the two. Keep going until the list is complete.'}
         </p>
+
+        <div className="mt-4 flex items-center gap-1 rounded-lg bg-neutral-900 p-1 w-fit">
+          {SPORTS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSportId(s.id)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer transition ${
+                s.id === sportId
+                  ? 'bg-neutral-700 text-neutral-100'
+                  : 'text-neutral-400 hover:text-neutral-100'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
 
         {communityEnabled && (
           <nav className="mt-4 flex gap-1 border-b border-neutral-800">
@@ -111,81 +92,156 @@ export default function App() {
 
       {tab === 'community' ? (
         <main className="w-full max-w-2xl">
-          <Community />
+          <Community sport={sportId} />
         </main>
-      ) : shared ? (
-        <Results order={shared} onRestart={restart} shared />
-      ) : done ? (
-        <Results
-          order={result(state)}
-          comparisons={state.comparisons}
-          onRestart={restart}
-          submitState={submitState}
-        />
       ) : (
-        pair && (
-          <main className="w-full max-w-2xl">
-            <div className="mb-6">
-              <div className="flex justify-between text-sm text-neutral-400 mb-2">
-                <span>
-                  {state.comparisons} of ~{TOTAL} picks
-                </span>
-                <span>{pct}%</span>
-              </div>
-              <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 transition-all duration-200"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <TeamButton id={pair[0]} onClick={() => pick('left')} />
-              <TeamButton id={pair[1]} onClick={() => pick('right')} />
-            </div>
-
-            <div className="mt-6 flex items-center gap-6">
-              <button
-                onClick={undo}
-                disabled={history.length === 0}
-                className="text-sm text-neutral-400 hover:text-neutral-100 disabled:opacity-30 disabled:hover:text-neutral-400 cursor-pointer disabled:cursor-default"
-              >
-                ← Undo last pick
-              </button>
-              <ConfirmButton
-                label="Start over"
-                confirmLabel="Discard your picks?"
-                onConfirm={restart}
-              />
-            </div>
-
-            <div className="mt-6">
-              {communityEnabled && (
-                <p className="text-xs text-neutral-500">
-                  When you finish, your ranking is added anonymously to the Community page. No
-                  account, no name, nothing but the order.
-                </p>
-              )}
-            </div>
-          </main>
-        )
+        // Every sport's quiz stays mounted, hidden rather than unmounted, so
+        // switching leagues part-way through doesn't throw away your picks.
+        SPORTS.map((s) => (
+          <div key={s.id} className={s.id === sportId ? 'w-full max-w-2xl' : 'hidden'}>
+            <Quiz
+              sport={s}
+              shared={shared?.sport === s.id ? shared.order : null}
+              onClearShared={clearShared}
+            />
+          </div>
+        ))
       )}
     </div>
   )
 }
 
-function TeamButton({ id, onClick }: { id: string; onClick: () => void }) {
-  const team = TEAMS_BY_ID.get(id)
+function Quiz({
+  sport,
+  shared,
+  onClearShared,
+}: {
+  sport: Sport
+  /** A ranking someone shared, shown instead of the quiz. */
+  shared: string[] | null
+  onClearShared: () => void
+}) {
+  const total = estimateTotal(sport.teams.length)
+
+  const [state, setState] = useState<SortState>(() => newRun(sport))
+  // Previous states, newest last. Undo pops one off.
+  const [history, setHistory] = useState<SortState[]>([])
+
+  function pick(choice: Choice) {
+    setHistory((h) => [...h, state])
+    setState(choose(state, choice))
+  }
+
+  function undo() {
+    const prev = history[history.length - 1]
+    if (!prev) return
+    setHistory((h) => h.slice(0, -1))
+    setState(prev)
+  }
+
+  function restart() {
+    setHistory([])
+    setState(newRun(sport))
+    onClearShared()
+    submitted.current = null
+    setSubmitState('idle')
+  }
+
+  const pair = currentPair(state)
+  const done = isDone(state)
+  const pct = done ? 100 : Math.min(99, Math.round((state.comparisons / total) * 100))
+
+  // Send each finished ranking to the community page exactly once. The ref
+  // holds what was already sent, which also makes this safe against React
+  // running the effect twice in development.
+  const submitted = useRef<string | null>(null)
+  const [submitState, setSubmitState] = useState<'idle' | 'sending' | 'saved' | 'failed'>('idle')
+
+  useEffect(() => {
+    if (!communityEnabled || shared || !done) return
+    const order = result(state)
+    const key = order.join(',')
+    if (submitted.current === key) return
+    submitted.current = key
+    setSubmitState('sending')
+    submitRanking(sport.id, order).then((ok) => setSubmitState(ok ? 'saved' : 'failed'))
+  }, [done, shared, state, sport])
+
+  if (shared) {
+    return <Results sport={sport} order={shared} onRestart={restart} shared />
+  }
+
+  if (done) {
+    return (
+      <Results
+        sport={sport}
+        order={result(state)}
+        comparisons={state.comparisons}
+        onRestart={restart}
+        submitState={submitState}
+      />
+    )
+  }
+
+  if (!pair) return null
+
+  return (
+    <main className="w-full">
+      <div className="mb-6">
+        <div className="flex justify-between text-sm text-neutral-400 mb-2">
+          <span>
+            {state.comparisons} of ~{total} picks
+          </span>
+          <span>{pct}%</span>
+        </div>
+        <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 transition-all duration-200"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Always two across, so the choice reads as a matchup rather than a list. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <TeamButton sport={sport} id={pair[0]} onClick={() => pick('left')} />
+        <TeamButton sport={sport} id={pair[1]} onClick={() => pick('right')} />
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
+        <button
+          onClick={undo}
+          disabled={history.length === 0}
+          className="text-sm text-neutral-400 hover:text-neutral-100 disabled:opacity-30 disabled:hover:text-neutral-400 cursor-pointer disabled:cursor-default"
+        >
+          ← Undo last pick
+        </button>
+        <ConfirmButton label="Start over" confirmLabel="Discard your picks?" onConfirm={restart} />
+      </div>
+
+      <div className="mt-6">
+        {communityEnabled && (
+          <p className="text-xs text-neutral-500">
+            When you finish, your ranking is added anonymously to the Community page. No account, no
+            name, nothing but the order.
+          </p>
+        )}
+      </div>
+    </main>
+  )
+}
+
+function TeamButton({ sport, id, onClick }: { sport: Sport; id: string; onClick: () => void }) {
+  const team = sport.byId.get(id)
   if (!team) return null
   return (
     <button
       onClick={onClick}
       style={{ backgroundColor: team.color }}
-      className="rounded-xl p-8 text-left text-white shadow-lg ring-1 ring-white/10 transition hover:scale-[1.02] hover:ring-white/40 active:scale-100 cursor-pointer"
+      className="rounded-xl p-5 sm:p-8 text-left text-white shadow-lg ring-1 ring-white/10 transition hover:scale-[1.02] hover:ring-white/40 active:scale-100 cursor-pointer"
     >
-      <div className="text-sm/5 opacity-80">{team.city}</div>
-      <div className="text-2xl font-bold">{team.name}</div>
+      <div className="text-xs/4 sm:text-sm/5 opacity-80">{team.city || ' '}</div>
+      <div className="text-xl sm:text-2xl font-bold">{team.name}</div>
     </button>
   )
 }
@@ -214,12 +270,14 @@ function Tab({
 }
 
 function Results({
+  sport,
   order,
   comparisons,
   onRestart,
   shared = false,
   submitState = 'idle',
 }: {
+  sport: Sport
   order: string[]
   comparisons?: number
   onRestart: () => void
@@ -228,7 +286,7 @@ function Results({
   submitState?: 'idle' | 'sending' | 'saved' | 'failed'
 }) {
   return (
-    <main className="w-full max-w-2xl">
+    <main className="w-full">
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="text-xl font-bold">{shared ? 'Their ranking' : 'Your ranking'}</h2>
         {comparisons !== undefined && (
@@ -237,7 +295,7 @@ function Results({
       </div>
       <ol className="space-y-1">
         {order.map((id, i) => {
-          const team = TEAMS_BY_ID.get(id)!
+          const team = sport.byId.get(id)!
           return (
             <li key={id} className="flex items-center gap-3 bg-neutral-900 rounded-lg px-3 py-2">
               <span className="w-6 text-right text-neutral-500 tabular-nums">{i + 1}</span>
@@ -258,8 +316,8 @@ function Results({
           </button>
         ) : (
           <>
-            <ShareButton order={order} />
-            <CopyImageButton order={order} />
+            <ShareButton sport={sport.id} order={order} />
+            <CopyImageButton sport={sport.id} order={order} />
             <ConfirmButton
               label="Start over"
               confirmLabel="Discard this ranking?"
@@ -286,12 +344,12 @@ function Results({
  * Copies a link containing the whole ranking. Falls back to showing the URL
  * for manual copying, since the clipboard API needs permission it may not get.
  */
-function ShareButton({ order }: { order: string[] }) {
+function ShareButton({ sport, order }: { sport: SportId; order: string[] }) {
   const [copied, setCopied] = useState(false)
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null)
 
   async function share() {
-    const url = shareUrl(order)
+    const url = shareUrl(sport, order)
     try {
       await navigator.clipboard.writeText(url)
       setCopied(true)
@@ -323,12 +381,12 @@ function ShareButton({ order }: { order: string[] }) {
 }
 
 /** Copies the ranking as a picture, for pasting somewhere that isn't a link. */
-function CopyImageButton({ order }: { order: string[] }) {
+function CopyImageButton({ sport, order }: { sport: SportId; order: string[] }) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'downloaded' | 'failed'>('idle')
 
   async function run() {
     try {
-      setStatus(await copyRankingImage(order))
+      setStatus(await copyRankingImage(sport, order))
     } catch {
       setStatus('failed')
     }

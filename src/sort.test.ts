@@ -5,7 +5,7 @@
 // Run with: node --experimental-strip-types src/sort.test.ts
 
 import { createSortState, choose, currentPair, isDone, result, estimateTotal } from './sort.ts'
-import { TEAMS } from './teams.ts'
+import { SPORTS } from './teams.ts'
 
 function runSort(truth: string[]): { order: string[]; comparisons: number } {
   const rank = new Map(truth.map((id, i) => [id, i]))
@@ -44,45 +44,47 @@ function shuffle<T>(arr: T[], seed: number): T[] {
   return out
 }
 
-const ids = TEAMS.map((t) => t.id)
+for (const sport of SPORTS) {
+  const ids = sport.teams.map((t) => t.id)
 
-console.log(`teams: ${ids.length}, unique ids: ${new Set(ids).size}`)
-check('all team ids are unique', new Set(ids).size === ids.length)
+  console.log(`\n=== ${sport.label}: ${ids.length} teams ===`)
+  check(`${sport.label} team ids are unique`, new Set(ids).size === ids.length)
 
-console.log('\n30 teams, 200 random ground-truth rankings:')
-let worst = 0
-let total = 0
-let allExact = true
-for (let seed = 1; seed <= 200; seed++) {
-  const truth = shuffle(ids, seed)
-  const { order, comparisons } = runSort(truth)
-  if (order.join(',') !== truth.join(',')) allExact = false
-  worst = Math.max(worst, comparisons)
-  total += comparisons
-}
-check('every run reproduced the ground-truth ranking exactly', allExact)
-console.log(`  comparisons: avg ${(total / 200).toFixed(1)}, worst ${worst}`)
-check(
-  `worst case (${worst}) within estimate (${estimateTotal(30)})`,
-  worst <= estimateTotal(30),
-)
+  console.log(`\n${ids.length} teams, 200 random ground-truth rankings:`)
+  let worst = 0
+  let total = 0
+  let allExact = true
+  for (let seed = 1; seed <= 200; seed++) {
+    const truth = shuffle(ids, seed)
+    const { order, comparisons } = runSort(truth)
+    if (order.join(',') !== truth.join(',')) allExact = false
+    worst = Math.max(worst, comparisons)
+    total += comparisons
+  }
+  check('every run reproduced the ground-truth ranking exactly', allExact)
+  console.log(`  comparisons: avg ${(total / 200).toFixed(1)}, worst ${worst}`)
+  check(
+    `worst case (${worst}) within estimate (${estimateTotal(ids.length)})`,
+    worst <= estimateTotal(ids.length),
+  )
 
-console.log('\nedge cases:')
-for (const n of [0, 1, 2, 3, 5, 17]) {
-  const truth = ids.slice(0, n)
-  const { order } = runSort(truth)
-  check(`n=${n} sorts correctly`, order.join(',') === truth.join(','))
-}
+  console.log('\nedge cases:')
+  for (const n of [0, 1, 2, 3, 5, 17]) {
+    const truth = ids.slice(0, n)
+    const { order } = runSort(truth)
+    check(`n=${n} sorts correctly`, order.join(',') === truth.join(','))
+  }
 
-console.log('\nundo safety (states must be immutable):')
-{
-  const truth = shuffle(ids, 42)
-  const rank = new Map(truth.map((id, i) => [id, i]))
-  const start = createSortState([...ids])
-  const snapshot = JSON.stringify(start)
-  const pair = currentPair(start)!
-  choose(start, rank.get(pair[0])! < rank.get(pair[1])! ? 'left' : 'right')
-  check('choose() does not mutate the state passed in', JSON.stringify(start) === snapshot)
+  console.log('\nundo safety (states must be immutable):')
+  {
+    const truth = shuffle(ids, 42)
+    const rank = new Map(truth.map((id, i) => [id, i]))
+    const start = createSortState([...ids])
+    const snapshot = JSON.stringify(start)
+    const pair = currentPair(start)!
+    choose(start, rank.get(pair[0])! < rank.get(pair[1])! ? 'left' : 'right')
+    check('choose() does not mutate the state passed in', JSON.stringify(start) === snapshot)
+  }
 }
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`)

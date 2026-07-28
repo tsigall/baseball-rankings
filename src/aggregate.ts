@@ -5,7 +5,7 @@
 // and it's simple enough to check by hand — which matters when the community
 // page shows a result nobody expected.
 
-import { TEAMS } from './teams.ts'
+import { getSport, type SportId } from './teams.ts'
 
 export type CommunityRow = {
   id: string
@@ -15,7 +15,7 @@ export type CommunityRow = {
   count: number
 }
 
-export function aggregate(rankings: string[][]): CommunityRow[] {
+export function aggregate(sport: SportId, rankings: string[][]): CommunityRow[] {
   const totals = new Map<string, { sum: number; count: number }>()
 
   for (const ranking of rankings) {
@@ -27,7 +27,8 @@ export function aggregate(rankings: string[][]): CommunityRow[] {
     })
   }
 
-  return TEAMS.filter((team) => totals.has(team.id))
+  return getSport(sport)
+    .teams.filter((team) => totals.has(team.id))
     .map((team) => {
       const { sum, count } = totals.get(team.id)!
       return { id: team.id, average: sum / count, count }
