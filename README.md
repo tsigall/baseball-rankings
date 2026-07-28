@@ -50,13 +50,14 @@ get a download instead.
 
 ## Community rankings
 
-Off by default. See [COMMUNITY.md](COMMUNITY.md) to switch it on — it needs a
-free Supabase project and two keys pasted into `src/config.ts`. With it off,
-there's no Community tab and nothing is sent anywhere.
-
-When on, finishing a quiz submits the ranking anonymously (just the 30-character
+Live. Finishing a quiz submits the ranking anonymously (just the 30-character
 code, no name or account), and the Community tab averages each team's position
 across every submission. `src/aggregate.ts` holds that math.
+
+Backed by Supabase; see [COMMUNITY.md](COMMUNITY.md) for the schema, the
+security rules, and how to remove a bad submission. Clearing the keys in
+`src/config.ts` turns the whole thing off again — no Community tab, nothing
+sent anywhere.
 
 ## Editing teams
 
@@ -64,7 +65,6 @@ across every submission. `src/aggregate.ts` holds that math.
 
 ## Status
 
-Working end to end: quiz, progress bar, undo, start-over with confirmation,
-results list, shareable links, copy-as-image. Community rankings are built but
-switched off pending a Supabase project. Not yet built: team logos, visual
-polish.
+Live at https://tsigall.github.io/baseball-rankings/ — quiz, progress bar, undo,
+start-over with confirmation, results list, shareable links, copy-as-image, and
+community rankings. Not yet built: team logos, visual polish.
