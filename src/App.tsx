@@ -299,6 +299,32 @@ function Results({
           <span className="text-sm text-neutral-400">{comparisons} picks</span>
         )}
       </div>
+      {/*
+        Sharing sits above the list, not below it. At the bottom of 30-odd rows
+        it was off-screen the moment the results appeared, and people finished
+        without ever seeing it.
+      */}
+      <div className="mb-5 rounded-xl bg-neutral-900 ring-1 ring-neutral-800 p-4">
+        {shared ? (
+          <button
+            onClick={onRestart}
+            className="rounded-lg bg-emerald-600 px-5 py-2.5 font-semibold hover:bg-emerald-500 cursor-pointer"
+          >
+            Make your own ranking
+          </button>
+        ) : (
+          <>
+            <p className="text-sm text-neutral-300 mb-3">
+              Send it to someone — the link contains your whole ranking.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <ShareButton sport={sport.id} order={order} />
+              <CopyImageButton sport={sport.id} order={order} />
+            </div>
+          </>
+        )}
+      </div>
+
       <ol className="space-y-1">
         {order.map((id, i) => {
           const team = sport.byId.get(id)!
@@ -312,27 +338,19 @@ function Results({
           )
         })}
       </ol>
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        {shared ? (
-          <button
-            onClick={onRestart}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 cursor-pointer"
-          >
-            Make your own ranking
-          </button>
-        ) : (
-          <>
-            <ShareButton sport={sport.id} order={order} />
-            <CopyImageButton sport={sport.id} order={order} />
-            <ConfirmButton
-              label="Start over"
-              confirmLabel="Discard this ranking?"
-              onConfirm={onRestart}
-              solid
-            />
-          </>
-        )}
-      </div>
+
+      {/* Start over stays at the bottom: it throws the ranking away, so it
+          shouldn't sit next to the buttons people are aiming for. */}
+      {!shared && (
+        <div className="mt-6">
+          <ConfirmButton
+            label="Start over"
+            confirmLabel="Discard this ranking?"
+            onConfirm={onRestart}
+            solid
+          />
+        </div>
+      )}
 
       {!shared && submitState !== 'idle' && (
         <p className="mt-4 text-xs text-neutral-500">
@@ -379,9 +397,9 @@ function ShareButton({ sport, order }: { sport: SportId; order: string[] }) {
   return (
     <button
       onClick={share}
-      className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 cursor-pointer"
+      className="rounded-lg bg-emerald-600 px-5 py-2.5 font-semibold hover:bg-emerald-500 cursor-pointer"
     >
-      {copied ? 'Link copied!' : 'Share your ranking'}
+      {copied ? 'Link copied!' : 'Copy share link'}
     </button>
   )
 }
@@ -409,7 +427,7 @@ function CopyImageButton({ sport, order }: { sport: SportId; order: string[] }) 
   return (
     <button
       onClick={run}
-      className="rounded-lg bg-neutral-800 px-4 py-2 text-sm hover:bg-neutral-700 cursor-pointer"
+      className="rounded-lg bg-neutral-800 px-5 py-2.5 font-medium ring-1 ring-neutral-700 hover:bg-neutral-700 cursor-pointer"
     >
       {label}
     </button>
