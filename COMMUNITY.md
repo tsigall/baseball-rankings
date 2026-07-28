@@ -46,6 +46,24 @@ own. Deleting a bad row is done by you, from the Supabase dashboard.
 The `char_length(code) = 30` check means malformed rows get rejected by the
 database rather than landing in the aggregate.
 
+## 2b. Seed the four existing rankings
+
+Four rankings were collected before the database existed. Run this in the same
+SQL Editor to load them, so the Community page isn't empty on day one:
+
+```sql
+insert into rankings (code) values
+  ('n61e9kl8mf0cga37hqi24p5todrjsb'),
+  ('4nmh7836ltgqcaps9f1k0d5roib2ej'),
+  ('kn6m908l1facqrieo7hg3t5pjd4s2b'),
+  ('ne6md70ol81g2rqahfkp3t9c45ijsb');
+```
+
+Each was checked for all 30 teams, no duplicates, and no omissions. Together
+they put the Mariners first (ranked 1st, 2nd, 2nd, 1st) and the Astros last.
+
+Run this **once** — running it again would double-count all four.
+
 ## 3. Paste the keys in
 
 In Supabase, go to **Project Settings → API** and copy:
