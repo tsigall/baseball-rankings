@@ -33,6 +33,21 @@ node --experimental-strip-types src/sort.test.ts
 It plays the part of a user with a fixed secret ranking, answers every
 comparison consistently, and checks the sort reproduces that ranking exactly.
 
+## Sharing
+
+`src/share.ts` packs the finished ranking into the URL — one character per
+team, so a full ranking is 30 characters and needs no server or database.
+Malformed codes (truncated by a chat app, hand-edited) are rejected and fall
+back to a fresh quiz.
+
+Codes are assigned by sorted team id rather than by position in `teams.ts`, so
+rearranging that file won't break links people have already shared. Adding or
+removing a team still would.
+
+`src/image.ts` draws the ranking to a canvas and copies it as a PNG, for
+pasting somewhere a link won't do. Browsers that refuse clipboard image writes
+get a download instead.
+
 ## Editing teams
 
 `src/teams.ts` — names, cities, colors. Nothing else depends on the contents.
@@ -40,4 +55,5 @@ comparison consistently, and checks the sort reproduces that ranking exactly.
 ## Status
 
 Working end to end: quiz, progress bar, undo, start-over with confirmation,
-results list. Not yet built: team logos, visual polish, shareable result links.
+results list, shareable links, copy-as-image. Not yet built: team logos,
+visual polish.

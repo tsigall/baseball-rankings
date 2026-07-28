@@ -10,6 +10,8 @@ import {
   type Choice,
   type SortState,
 } from './sort.ts'
+import { rankingFromUrl, shareUrl } from './share.ts'
+import { copyRankingImage } from './image.ts'
 
 const TOTAL = estimateTotal(TEAMS.length)
 
@@ -34,6 +36,8 @@ export default function App() {
   const [state, setState] = useState<SortState>(newRun)
   // Previous states, newest last. Undo pops one off.
   const [history, setHistory] = useState<SortState[]>([])
+  // Someone else's ranking, if they arrived via a shared link.
+  const [shared, setShared] = useState<string[] | null>(rankingFromUrl)
 
   function pick(choice: Choice) {
     setHistory((h) => [...h, state])
@@ -50,6 +54,9 @@ export default function App() {
   function restart() {
     setHistory([])
     setState(newRun())
+    // Drop the ?r= code so a reload doesn't drag the shared ranking back.
+    setShared(null)
+    window.history.replaceState(null, '', window.location.pathname)
   }
 
   const pair = currentPair(state)
@@ -61,11 +68,15 @@ export default function App() {
       <header className="w-full max-w-2xl mb-8">
         <h1 className="text-2xl font-bold">Rank all 30 MLB teams</h1>
         <p className="text-neutral-400 text-sm mt-1">
-          Pick your favorite of the two. Keep going until the list is complete.
+          {shared
+            ? "You're looking at someone else's ranking."
+            : 'Pick your favorite of the two. Keep going until the list is complete.'}
         </p>
       </header>
 
-      {done ? (
+      {shared ? (
+        <Results order={shared} onRestart={restart} shared />
+      ) : done ? (
         <Results order={result(state)} comparisons={state.comparisons} onRestart={restart} />
       ) : (
         pair && (
@@ -130,16 +141,21 @@ function Results({
   order,
   comparisons,
   onRestart,
+  shared = false,
 }: {
   order: string[]
-  comparisons: number
+  comparisons?: number
   onRestart: () => void
+  /** True when viewing a ranking someone else shared, rather than your own. */
+  shared?: boolean
 }) {
   return (
     <main className="w-full max-w-2xl">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-xl font-bold">Your ranking</h2>
-        <span className="text-sm text-neutral-400">{comparisons} picks</span>
+        <h2 className="text-xl font-bold">{shared ? 'Their ranking' : 'Your ranking'}</h2>
+        {comparisons !== undefined && (
+          <span className="text-sm text-neutral-400">{comparisons} picks</span>
+        )}
       </div>
       <ol className="space-y-1">
         {order.map((id, i) => {
@@ -154,15 +170,98 @@ function Results({
           )
         })}
       </ol>
-      <div className="mt-6">
-        <ConfirmButton
-          label="Start over"
-          confirmLabel="Discard this ranking?"
-          onConfirm={onRestart}
-          solid
-        />
+      <div className="mt-6 flex flex-wrap items-center gap-4">
+        {shared ? (
+          <button
+            onClick={onRestart}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 cursor-pointer"
+          >
+            Make your own ranking
+          </button>
+        ) : (
+          <>
+            <ShareButton order={order} />
+            <CopyImageButton order={order} />
+            <ConfirmButton
+              label="Start over"
+              confirmLabel="Discard this ranking?"
+              onConfirm={onRestart}
+              solid
+            />
+          </>
+        )}
       </div>
     </main>
+  )
+}
+
+/**
+ * Copies a link containing the whole ranking. Falls back to showing the URL
+ * for manual copying, since the clipboard API needs permission it may not get.
+ */
+function ShareButton({ order }: { order: string[] }) {
+  const [copied, setCopied] = useState(false)
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null)
+
+  async function share() {
+    const url = shareUrl(order)
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setFallbackUrl(url)
+    }
+  }
+
+  if (fallbackUrl) {
+    return (
+      <input
+        readOnly
+        value={fallbackUrl}
+        onFocus={(e) => e.currentTarget.select()}
+        className="w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200"
+      />
+    )
+  }
+
+  return (
+    <button
+      onClick={share}
+      className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 cursor-pointer"
+    >
+      {copied ? 'Link copied!' : 'Share your ranking'}
+    </button>
+  )
+}
+
+/** Copies the ranking as a picture, for pasting somewhere that isn't a link. */
+function CopyImageButton({ order }: { order: string[] }) {
+  const [status, setStatus] = useState<'idle' | 'copied' | 'downloaded' | 'failed'>('idle')
+
+  async function run() {
+    try {
+      setStatus(await copyRankingImage(order))
+    } catch {
+      setStatus('failed')
+    }
+    setTimeout(() => setStatus('idle'), 2500)
+  }
+
+  const label = {
+    idle: 'Copy as image',
+    copied: 'Image copied!',
+    downloaded: 'Image downloaded',
+    failed: "Couldn't make image",
+  }[status]
+
+  return (
+    <button
+      onClick={run}
+      className="rounded-lg bg-neutral-800 px-4 py-2 text-sm hover:bg-neutral-700 cursor-pointer"
+    >
+      {label}
+    </button>
   )
 }
 
