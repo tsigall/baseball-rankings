@@ -27,6 +27,7 @@ jobs:
       - run: npm ci
       - run: node --experimental-strip-types src/sort.test.ts
       - run: node --experimental-strip-types src/share.test.ts
+      - run: node --experimental-strip-types src/aggregate.test.ts
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

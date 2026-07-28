@@ -48,6 +48,16 @@ removing a team still would.
 pasting somewhere a link won't do. Browsers that refuse clipboard image writes
 get a download instead.
 
+## Community rankings
+
+Off by default. See [COMMUNITY.md](COMMUNITY.md) to switch it on — it needs a
+free Supabase project and two keys pasted into `src/config.ts`. With it off,
+there's no Community tab and nothing is sent anywhere.
+
+When on, finishing a quiz submits the ranking anonymously (just the 30-character
+code, no name or account), and the Community tab averages each team's position
+across every submission. `src/aggregate.ts` holds that math.
+
 ## Editing teams
 
 `src/teams.ts` — names, cities, colors. Nothing else depends on the contents.
@@ -55,5 +65,6 @@ get a download instead.
 ## Status
 
 Working end to end: quiz, progress bar, undo, start-over with confirmation,
-results list, shareable links, copy-as-image. Not yet built: team logos,
-visual polish.
+results list, shareable links, copy-as-image. Community rankings are built but
+switched off pending a Supabase project. Not yet built: team logos, visual
+polish.

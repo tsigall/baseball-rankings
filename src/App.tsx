@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TEAMS, TEAMS_BY_ID } from './teams.ts'
 import {
   createSortState,
@@ -12,6 +12,9 @@ import {
 } from './sort.ts'
 import { rankingFromUrl, shareUrl } from './share.ts'
 import { copyRankingImage } from './image.ts'
+import { communityEnabled } from './config.ts'
+import { submitRanking } from './community.ts'
+import Community from './Community.tsx'
 
 const TOTAL = estimateTotal(TEAMS.length)
 
@@ -38,6 +41,7 @@ export default function App() {
   const [history, setHistory] = useState<SortState[]>([])
   // Someone else's ranking, if they arrived via a shared link.
   const [shared, setShared] = useState<string[] | null>(rankingFromUrl)
+  const [tab, setTab] = useState<'rank' | 'community'>('rank')
 
   function pick(choice: Choice) {
     setHistory((h) => [...h, state])
@@ -57,27 +61,67 @@ export default function App() {
     // Drop the ?r= code so a reload doesn't drag the shared ranking back.
     setShared(null)
     window.history.replaceState(null, '', window.location.pathname)
+    submitted.current = null
+    setSubmitState('idle')
   }
 
   const pair = currentPair(state)
   const done = isDone(state)
   const pct = done ? 100 : Math.min(99, Math.round((state.comparisons / TOTAL) * 100))
 
+  // Send each finished ranking to the community page exactly once. The ref
+  // holds what was already sent, which also makes this safe against React
+  // running the effect twice in development.
+  const submitted = useRef<string | null>(null)
+  const [submitState, setSubmitState] = useState<'idle' | 'sending' | 'saved' | 'failed'>('idle')
+
+  useEffect(() => {
+    if (!communityEnabled || shared || !done) return
+    const order = result(state)
+    const key = order.join(',')
+    if (submitted.current === key) return
+    submitted.current = key
+    setSubmitState('sending')
+    submitRanking(order).then((ok) => setSubmitState(ok ? 'saved' : 'failed'))
+  }, [done, shared, state])
+
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col items-center px-4 py-8">
       <header className="w-full max-w-2xl mb-8">
         <h1 className="text-2xl font-bold">Rank all 30 MLB teams</h1>
         <p className="text-neutral-400 text-sm mt-1">
-          {shared
-            ? "You're looking at someone else's ranking."
-            : 'Pick your favorite of the two. Keep going until the list is complete.'}
+          {tab === 'community'
+            ? 'How everyone who has finished the quiz ranks the teams.'
+            : shared
+              ? "You're looking at someone else's ranking."
+              : 'Pick your favorite of the two. Keep going until the list is complete.'}
         </p>
+
+        {communityEnabled && (
+          <nav className="mt-4 flex gap-1 border-b border-neutral-800">
+            <Tab active={tab === 'rank'} onClick={() => setTab('rank')}>
+              Rank teams
+            </Tab>
+            <Tab active={tab === 'community'} onClick={() => setTab('community')}>
+              Community
+            </Tab>
+          </nav>
+        )}
       </header>
 
-      {shared ? (
+      {tab === 'community' ? (
+        <main className="w-full max-w-2xl">
+          <Community />
+        </main>
+      ) : shared ? (
         <Results order={shared} onRestart={restart} shared />
       ) : done ? (
-        <Results order={result(state)} comparisons={state.comparisons} onRestart={restart} />
+        <Results
+          order={result(state)}
+          comparisons={state.comparisons}
+          onRestart={restart}
+          submitState={submitState}
+        />
       ) : (
         pair && (
           <main className="w-full max-w-2xl">
@@ -115,6 +159,15 @@ export default function App() {
                 onConfirm={restart}
               />
             </div>
+
+            <div className="mt-6">
+              {communityEnabled && (
+                <p className="text-xs text-neutral-500">
+                  When you finish, your ranking is added anonymously to the Community page. No
+                  account, no name, nothing but the order.
+                </p>
+              )}
+            </div>
           </main>
         )
       )}
@@ -137,17 +190,42 @@ function TeamButton({ id, onClick }: { id: string; onClick: () => void }) {
   )
 }
 
+function Tab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-2 text-sm cursor-pointer border-b-2 -mb-px ${
+        active
+          ? 'border-emerald-500 text-neutral-100'
+          : 'border-transparent text-neutral-400 hover:text-neutral-100'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
 function Results({
   order,
   comparisons,
   onRestart,
   shared = false,
+  submitState = 'idle',
 }: {
   order: string[]
   comparisons?: number
   onRestart: () => void
   /** True when viewing a ranking someone else shared, rather than your own. */
   shared?: boolean
+  submitState?: 'idle' | 'sending' | 'saved' | 'failed'
 }) {
   return (
     <main className="w-full max-w-2xl">
@@ -191,6 +269,15 @@ function Results({
           </>
         )}
       </div>
+
+      {!shared && submitState !== 'idle' && (
+        <p className="mt-4 text-xs text-neutral-500">
+          {submitState === 'sending' && 'Adding your ranking to the Community page…'}
+          {submitState === 'saved' && 'Added anonymously to the Community page.'}
+          {submitState === 'failed' &&
+            "Couldn't reach the Community page — your ranking wasn't saved there."}
+        </p>
+      )}
     </main>
   )
 }
