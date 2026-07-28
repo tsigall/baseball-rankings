@@ -92,7 +92,13 @@ export default function App() {
 
       {tab === 'community' ? (
         <main className="w-full max-w-2xl">
-          <Community sport={sportId} />
+          {/*
+            Keyed by sport so switching leagues remounts rather than briefly
+            rendering the previous league's rows against the new league's team
+            list — those ids mostly don't overlap, and the ones that do would
+            show the wrong team.
+          */}
+          <Community key={sportId} sport={sportId} />
         </main>
       ) : (
         // Every sport's quiz stays mounted, hidden rather than unmounted, so

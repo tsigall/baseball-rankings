@@ -56,7 +56,10 @@ export default function Community({ sport }: { sport: SportId }) {
 
       <ol className="space-y-1">
         {load.rows.map((row, i) => {
-          const team = teams.get(row.id)!
+          // Skip ids this sport doesn't know rather than asserting they exist.
+          // A missing team should cost one row, not the whole page.
+          const team = teams.get(row.id)
+          if (!team) return null
           return (
             <li
               key={row.id}
